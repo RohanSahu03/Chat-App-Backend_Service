@@ -4,6 +4,7 @@ import connectDB from "./config/db.js";
 import {createClient} from "redis";
 import userRoutes from "./routes/user.js";
 import { connectRabbitMQ } from "./config/rabbitmq.js";
+import cors from "cors";
 
 dotenv.config();
 // databse connection
@@ -24,6 +25,14 @@ redisClient.connect().then(()=>{
 });
 
 const app = express();
+
+app.use( cors({
+    origin: [ "http://localhost:3000"],
+    credentials: true,
+     methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 
 // middleware
 app.use(express.json());
