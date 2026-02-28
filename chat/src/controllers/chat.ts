@@ -168,45 +168,128 @@ export const sendMessage = TryCatch(async (req: AuthenticatedRequest, res) => {
 })
 
 export const getMessagesByChat = TryCatch(async (req: AuthenticatedRequest, res) => {
+    const startTime = Date.now();
+
     const { chatId } = req.params;
     const userId = req.user?._id;
+
+    console.log("========== GET MESSAGES START ==========");
+    console.log("Request Params:", { chatId, userId });
+
+    /* ---------------- VALIDATIONS ---------------- */
+
     if (!chatId) {
-        return res.status(400).json({ message: "Invalid chat id" })
+        console.warn("❌ Missing chatId");
+        return res.status(400).json({ message: "Invalid chat id" });
     }
+
     if (!userId) {
-        return res.status(400).json({ message: "Invalid user id" })
+        console.warn("❌ Missing userId (unauthorized)");
+        return res.status(400).json({ message: "Invalid user id" });
     }
 
-    const Chat = await chat.findById(chatId)
+    /* ---------------- FETCH CHAT ---------------- */
+
+    console.log("🔍 Fetching chat...");
+    const Chat = await chat.findById(chatId);
+
     if (!Chat) {
-        return res.status(404).json({ message: "chat not found" })
-    }
-    if (!Chat.users.includes(userId)) {
-        return res.status(400).json({ message: "You are not a part of this chat" })
+        console.warn("❌ Chat not found:", chatId);
+        return res.status(404).json({ message: "chat not found" });
     }
 
-    const msgToMarkSeen = await Message.find({ chatId, sender: { $ne: userId }, seen: false })
+    console.log("✅ Chat found:", {
+        chatId: Chat._id,
+        users: Chat.users
+    });
+
+    /* ---------------- AUTH CHECK ---------------- */
+
+    if (!Chat.users.some((id) => id.toString() === userId.toString())) {
+        console.warn("❌ User not part of chat:", {
+            userId,
+            chatUsers: Chat.users
+        });
+
+        return res.status(400).json({ message: "You are not a part of this chat" });
+    }
+
+    /* ---------------- MARK SEEN ---------------- */
+
+    console.log("🔍 Checking unseen messages...");
+
+    const msgToMarkSeen = await Message.find({
+        chatId,
+        sender: { $ne: userId },
+        seen: false
+    });
+
+    console.log(`Found ${msgToMarkSeen.length} unseen messages`);
+
     if (msgToMarkSeen.length > 0) {
-        await Message.updateMany({ chatId, sender: { $ne: userId }, seen: false }, { seen: true, seenAt: new Date() })
+        await Message.updateMany(
+            { chatId, sender: { $ne: userId }, seen: false },
+            { seen: true, seenAt: new Date() }
+        );
+
+        console.log("✅ Messages marked as seen");
     }
 
-    const messages = await Message.find({ chatId }).sort({ createdAt: 1 })
-    const otherUserId = Chat.users.find((id) => id.toString() !== userId.toString())
-    try {
-        const { data } = await axios.get(`${process.env.USER_SERVICE_URL}/api/v1/user/${otherUserId}`)
-        if (!otherUserId) {
-            return res.status(400).json({ message: "No other user found" })
-        }
+    /* ---------------- FETCH MESSAGES ---------------- */
 
-        //Socket works
+    console.log("📨 Fetching all messages...");
+    const messages = await Message.find({ chatId }).sort({ createdAt: 1 });
+
+    console.log(`✅ Total messages fetched: ${messages.length}`);
+
+    /* ---------------- OTHER USER ---------------- */
+
+    const otherUserId = Chat.users.find(
+        (id) => id.toString() !== userId.toString()
+    );
+
+    if (!otherUserId) {
+        console.warn("❌ No other user found in chat");
+        return res.status(400).json({ message: "No other user found" });
+    }
+
+    console.log("👤 Other user id:", otherUserId.toString());
+
+    /* ---------------- CALL USER SERVICE ---------------- */
+
+    try {
+        console.log("🌐 Calling user service...");
+
+        const { data } = await axios.get(
+            `${process.env.USER_SERVICE_URL}/api/v1/user/${otherUserId}`
+        );
+
+        console.log("✅ User service success:", data?.name);
+
+        console.log(
+            `⏱ Completed in ${Date.now() - startTime} ms`
+        );
+
+        console.log("========== GET MESSAGES END ==========\n");
 
         return res.status(200).json({
             message: "Messages fetched successfully",
             messages,
             user: data
-        })
-    } catch (error) {
-        console.log(error);
+        });
+
+    } catch (error: any) {
+        console.error("❌ User service failed:", {
+            message: error.message,
+            status: error.response?.status
+        });
+
+        console.log(
+            `⏱ Completed with fallback in ${Date.now() - startTime} ms`
+        );
+
+        console.log("========== GET MESSAGES END ==========\n");
+
         return res.status(200).json({
             message: "Messages fetched successfully",
             messages,
@@ -214,6 +297,6 @@ export const getMessagesByChat = TryCatch(async (req: AuthenticatedRequest, res)
                 name: "Unknown",
                 _id: otherUserId
             }
-        })
+        });
     }
-})
+});
