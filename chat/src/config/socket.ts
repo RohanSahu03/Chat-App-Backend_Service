@@ -29,7 +29,12 @@ io.on("connection",(socket:Socket)=>{
 
     socket.on("disconnect",()=>{
         console.log("user disconnected",socket.id);
-        
+        if(userId){
+            delete userSocketMap[userId];
+            console.log(`user ${userId} removed from online users`);
+            io.emit("getOnlineUser",Object.keys(userSocketMap))
+            
+        }
     })
     
     socket.on("connect_error",(error)=>{
