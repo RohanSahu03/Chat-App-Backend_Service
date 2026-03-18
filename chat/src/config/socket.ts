@@ -15,6 +15,11 @@ const io = new Server(server,{
 });
 
 const userSocketMap:Record<string,string> = {};
+
+export const getReceiverSocketId = (receiverId:string):string | undefined=>{
+    return userSocketMap[receiverId];
+}
+
 io.on("connection",(socket:Socket)=>{
     console.log("User connected",socket.id);
     const userId = socket.handshake.query.userId as string | undefined
@@ -78,4 +83,4 @@ io.on("connection",(socket:Socket)=>{
 
 
 
-export {app,server};
+export {app,server,io};
